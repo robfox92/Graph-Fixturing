@@ -45,6 +45,12 @@ def getExpectedOutcome(eloA: float, eloB: float) -> (float, float):
         expectedOutcome = 1/(1+10**-((eloA - eloB)/400.0))
     return (expectedOutcome, 1-expectedOutcome)
 
+def getScaledOutcome(outcome: float) -> float:
+    '''
+    Scales an expected outcome. Higher means a closer game
+    '''
+    return 2*(0.5-abs(outcome - 0.5))
+
 def getGameOutcome(scoreA: int, scoreB: int) -> (float, float):
     '''
     Returns the scaled outcome of a match as a float. Format is
@@ -102,3 +108,57 @@ def updateElosFromResults(elos: dict, results: pd.DataFrame, kValues: dict) -> d
         elos.update(updatedElos)
 
     return elos
+
+def checkIfGameInList(teamA: str, teamB: str, gamesList: list) -> (bool,int):
+    '''
+    Checks if a game is in a list. Pass it two teams and a list of games
+    (requests, previous games, etc) and it will return whether or not the game
+    is in the list as a bool and the count as (bool, count)
+    '''
+    isIn = False
+    count = 0
+    codeA = teamA + " vs " + teamB
+    codeB = teamB + " vs " + teamB
+    if codeA in gamesList:
+        isIn = True
+    if codeB in gamesList:
+        isIn = True
+    if isIn:                       # if the game is in the list, get the count
+        count = gamesList.count(codeA) + gamesList.count(codeB)
+    return (isIn, count)
+
+def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames: list,
+        requestedGames: pd.DataFrame, antiRequestedGames: pd.DataFrame) -> float:
+    '''
+    Evaluate how good a game will be, based on:
+      - The teams Elos
+      - Whether the game has happened before
+      - Whether the game has been requested
+      - Whether the game has been requested to not happen
+    Returns a float indicating how good the game is. Higher is "better"
+    '''
+    eloA = elosDict[teamA]
+    eloB = elosDict[teamB]
+    # Get the expected outcome. We only use the outcome with respect to team A
+    # as this should have the same scaled value as the outcome w.r.t. team B.
+    # We still have the expectedOutcomeB variable available, but it is not used
+    # currently.
+    expectedOutcomeA, expectedOutcomeB = getExpectedOutcome(eloA, eloB)
+    scaledOutcomeA = getScaledOutcome(expectedOutcomeA)
+    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB, fixturedGames)
+    gameRequested, gameRequestedCount = checkIfGameInList(teamA, teamB,
+            list(requestedGames['Game Code']))
+    gameNotRequested, gameNotRequestedCount = checkIfGameInList(teamA, teamB,
+            list(antiRequestedGames['Game Code']))
+    gameRating = 100                           # Start with a rating of 100
+    gameRating = gameRating + scaledOutcomeA   # Add by the scaledOutcome
+    if gameFixturedPrev:
+        gameRating = gameRating - gameFixturedPrevCount*10 # Decrement rating by
+                                                    # 25*number of prev fixtures
+    if gameRequested:
+        gameRating = gameRating + 2
+    if gameNotRequested:
+        gameRating = gameRating - 4
+    # Ensure we don't use negative ratings as they cause issues with maximally
+    # weighted matching
+    return max(gameRating,0)
