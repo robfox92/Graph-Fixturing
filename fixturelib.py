@@ -1,7 +1,7 @@
 # Fixturing Library, to fixture a league of arbitrary size
 # Uses the NetworkX library for maximally weighted matching
 import pandas as pd
-
+import networkx as nx
 
 def getDataFromRemote(URL: str, table: str) -> pd.DataFrame:
     '''
@@ -127,8 +127,8 @@ def checkIfGameInList(teamA: str, teamB: str, gamesList: list) -> (bool,int):
         count = gamesList.count(codeA) + gamesList.count(codeB)
     return (isIn, count)
 
-def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames: list,
-        requestedGames: pd.DataFrame, antiRequestedGames: pd.DataFrame) -> float:
+def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames:
+        list, requestedGames: list, antiRequestedGames: list) -> float:
     '''
     Evaluate how good a game will be, based on:
       - The teams Elos
@@ -145,11 +145,12 @@ def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames: list
     # currently.
     expectedOutcomeA, expectedOutcomeB = getExpectedOutcome(eloA, eloB)
     scaledOutcomeA = getScaledOutcome(expectedOutcomeA)
-    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB, fixturedGames)
+    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB, i
+            fixturedGames)
     gameRequested, gameRequestedCount = checkIfGameInList(teamA, teamB,
-            list(requestedGames['Game Code']))
+            requestedGames)
     gameNotRequested, gameNotRequestedCount = checkIfGameInList(teamA, teamB,
-            list(antiRequestedGames['Game Code']))
+            antiRequestedGames)
     gameRating = 100                           # Start with a rating of 100
     gameRating = gameRating + scaledOutcomeA   # Add by the scaledOutcome
     if gameFixturedPrev:
@@ -162,3 +163,63 @@ def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames: list
     # Ensure we don't use negative ratings as they cause issues with maximally
     # weighted matching
     return max(gameRating,0)
+
+def createGameRatingsGraph(teams: set, fixturedGames: list, requestedGames: list,
+        antiRequests: list, elosDict: dict) -> nx.Graph():
+    '''
+    Creates and returns a graph (not in the chart sense) of all possible games
+    between all possible teams. Each node in the graph is a team, and each edge
+    in the graph represents a game between the two teams, with an edge with a
+    weight representing "how good" the game will be.
+    '''
+    fixtureGraph = nx.Graph()
+    fixtureGraph.add_nodes_from(teams)
+    for teamA in teams:
+        for teamB in teams:
+            if teamA != teamB and not fixtureGraph.has_edge(teamA, teamB):
+                edgeWeight = createGameWeighting(teamA, teamB, elosDict,
+                        fixturedGames, requestedGames, antiRequestedGames)
+                graph.add_edge(teamA, teamB, weight = edgeWeight)
+    return fixtureGraph
+
+def getHomeGameCounts(teams: set, fixturedGames: list) -> dict:
+    '''
+    Given a list of teams and a list of games, returns a dict of how many home
+    games each tam has had.
+    '''
+    homeGameCounts = {team:0 for team in teams}
+    for team in teams:
+        for game in fixturedGames:
+            if game.startswith(team):
+                homeGameCounts[team] += 1
+    return homeGameCounts
+
+def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.DataFrame:
+    '''
+    Returns a df of fixtures, given a graph of ratings and a dict of previous home games.
+    We use the homeGameCounts to try and even out the home/away split, so that all teams
+    should get approximately the same number of home/away games over a season.
+    '''
+    bestPairings = nx.max_weight_matching(gameRatings)
+    fixture = pd.DataFrame(columns=['Home Team','Away Team','Game Code'])
+    row = 0
+    for teamA in bestPairings.keys():
+        teamB = bestPairings[teamA]
+        # Check if the teams have been fixtured so far, as the dict of pairings
+        # contains two entries for each "game" (e.g. {teamA:teamB,teamB:teamA}).
+        # We only want to fixture each game once though.
+        if (teamA not in fixture['Home Team'].unique() and
+            teamB not in fixture['Home Team'].unique() and
+            teamA not in fixture['Away Team'].unique() and
+            teamB not in fixture['Away Team'].unique()):
+            if homeGameCounts[teamA] > homeGameCounts[teamB]:
+                homeTeam = teamB
+                awayTeam = teamA
+            else:
+                homeTeam = teamA
+                awayTeam = teamB
+            fixture.loc[row,'Home Team'] = homeTeam
+            fixture.loc[row,'Away Team'] = awayTeam
+            fixture.loc[row,'Game Code'] = homeTeam + " vs " + awayTeam
+            r+=1
+    return fixture
