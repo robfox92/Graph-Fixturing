@@ -2,6 +2,7 @@
 # Uses the NetworkX library for maximally weighted matching
 import pandas as pd
 import networkx as nx
+import random
 
 def getDataFromRemote(URL: str, table: str) -> pd.DataFrame:
     '''
@@ -223,3 +224,39 @@ def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.D
             fixture.loc[row,'Game Code'] = homeTeam + " vs " + awayTeam
             r+=1
     return fixture
+
+def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
+        antiRequested: list, rematchesAllowed = 0: int) -> pd.DataFrame:
+    '''
+    Fixture a single round
+    '''
+    complete = False
+    while not complete:
+        gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested, 
+                antirequests, elos)
+        homeGameCounts = getHomeGameCounts(teams, fixtured)
+        fixtures = createFixturesFromGraph(gameRatingsGraph, fixtured, homeGameCounts)
+
+        # Check to see if any games have been fixtured previously
+        maxRepeats = 0
+        for row in range(len(fixtures)):
+            homeT = fixtures.loc[row,'Home Team']
+            awayT = fixtures.loc[row,'Away Team']
+            repeats = checkIfGameInList(homeT, awayT, fixtures)[1]
+            maxRepeats = max(repeats, maxRepeats)
+
+        if maxRepeats <= rematchesAllowed:
+            complete = True
+        else:
+            print("Error: Could not find fixture within maxRepeats")
+
+
+
+# TO BE IMPLEMENTED
+def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
+        antiRequested: list, rematchesAllowed) -> pd.DataFrame:
+    '''
+    Fixture two rounds at once. This is used when there are an odd number of
+    teams in the league, as we can avoid byes by fixturing two rounds at once.
+    '''
+    byeElo = random.choice(elos.values())
