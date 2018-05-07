@@ -147,7 +147,7 @@ def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames:
     # currently.
     expectedOutcomeA, expectedOutcomeB = getExpectedOutcome(eloA, eloB)
     scaledOutcomeA = getScaledOutcome(expectedOutcomeA)
-    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB, i
+    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB,
             fixturedGames)
     gameRequested, gameRequestedCount = checkIfGameInList(teamA, teamB,
             requestedGames)
@@ -227,7 +227,7 @@ def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.D
     return fixture
 
 def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
-        antiRequested: list, rematchesAllowed = 0: int) -> pd.DataFrame:
+        antiRequested: list, rematchesAllowed: int) -> pd.DataFrame:
     '''
     Fixture a single round
     '''
@@ -273,7 +273,7 @@ def findByeTeam(fixture: pd.DataFrame) -> str:
     return byeTeam
 
 def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
-        antiRequested: list, rematchesAllowed = 0: int) -> pd.DataFrame:
+        antiRequested: list, rematchesAllowed: int) -> pd.DataFrame:
     '''
     Fixture two rounds at once. This is used when there are an odd number of
     teams in the league, as we can avoid byes by fixturing two rounds at once.
@@ -321,20 +321,20 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
 
         # Check if we are within the allowable rematches
         maxRepeats = 0
-        for row in range(len(totalFixture.index))
+        for row in range(len(totalFixture.index)):
            homeT = totalFixture.loc[row,'Home Team']
            awayT = totalFixture.loc[row,'Away Team']
            repeats = checkIfGameInList(homeT, awayT, fixtured)[1]
            maxRepeats = max(maxRepeats, repeats)
-       if maxRepeats <= rematchesAllowed:
-            complete = True
+        if maxRepeats <= rematchesAllowed:
+           complete = True
         else:
-            print("Error: Could not find fixture within maxRepeats")
-            print("Slightly altering Elos to try and get a different solution")
-            for team in teams:
-                currElo = elos[team]
-                factor = random.uniform(-2.5,2.5)
-                elos[team] = currElo + factor
+           print("Error: Could not find fixture within maxRepeats")
+           print("Slightly altering Elos to try and get a different solution")
+           for team in teams:
+               currElo = elos[team]
+               factor = random.uniform(-2.5,2.5)
+               elos[team] = currElo + factor
 
     return totalFixture
 
