@@ -3,6 +3,7 @@
 import pandas as pd
 import networkx as nx
 import random
+import copy
 
 def getDataFromRemote(URL: str, table: str) -> pd.DataFrame:
     '''
@@ -81,7 +82,7 @@ def updateElosFromResults(elos: dict, results: pd.DataFrame, kValues: dict) -> d
         Home Score is kept in column "Home Score"
         Away Score is kept in column "Away Score"
     '''
-    for gameRow in range(len(results)):
+    for gameRow in range(len(results.index)):
         # Grab data from the df
         homeTeam = results.loc[gameRow,'Home Team']
         awayTeam = results.loc[gameRow,'Away Team']
@@ -239,7 +240,7 @@ def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
 
         # Check to see if any games have been fixtured previously
         maxRepeats = 0
-        for row in range(len(fixtures)):
+        for row in range(len(fixtures.index)):
             homeT = fixtures.loc[row,'Home Team']
             awayT = fixtures.loc[row,'Away Team']
             repeats = checkIfGameInList(homeT, awayT, fixtures)[1]
@@ -249,14 +250,94 @@ def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
             complete = True
         else:
             print("Error: Could not find fixture within maxRepeats")
+            print("Slightly altering Elos to try and get a different solution")
+            for team in teams:
+                currElo = elos[team]
+                factor = random.uniform(-2.5,2.5)
+                elos[team] = currElo + factor
+    return fixtures
 
+def findByeTeam(fixture: pd.DataFrame) -> str:
+    '''
+    Given a fixture with a bye team in it, return the team that has been
+    allocated a bye.
+    '''
+    byeRow = fixture[fixture == "Bye Team"].dropna(how = "all").index[0]
+    byeCol = fixture[fixture == "Bye Team"].dropna(how = "all",axis = 1).columns[0]
+    if byeCol == "Away Team":
+        byeTeamCol = "Home Team"
+    else:
+        byeTeamCol = "Away Team"
 
+    byeTeam = fixture.loc[byeRow,byeTeamCol]
+    return byeTeam
 
-# TO BE IMPLEMENTED
 def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
-        antiRequested: list, rematchesAllowed) -> pd.DataFrame:
+        antiRequested: list, rematchesAllowed = 0: int) -> pd.DataFrame:
     '''
     Fixture two rounds at once. This is used when there are an odd number of
     teams in the league, as we can avoid byes by fixturing two rounds at once.
     '''
-    byeElo = random.choice(elos.values())
+    complete = False
+    previousFixtured = copy.deepcopy(fixtured)
+    while not complete:
+
+        byeElo = random.choice(elos.values())
+        elos['Bye Team'] = byeElo
+        fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
+                antiRequested,rematchesAllowed)
+        
+        fixtured.extend(list(fixtureRd1['Game Code']))
+        fixtureRd2 = fixtureSingleRound(teams, elos, fixtured, requested,
+                antiRequested, rematchesAllowed)
+
+        byeTeam1 = findByeTeam(fixtureRd1)
+        byeTeam2 = findByeTeam(fixtureRd2)
+
+        # Remove the bye team games from the fixtures
+        fixtureRd1[fixtureRd1['Home Team'] != "Bye Team"]
+        fixtureRd1[fixtureRd1['Away Team'] != "Bye Team"]
+        fixtureRd2[fixtureRd2['Home Team'] != "Bye Team"]
+        fixtureRd2[fixtureRd2['Away Team'] != "Bye Team"]
+
+        previousFixtured.extend(list(fixtureRd1['Game Code']))
+        previousFixtured.extend(list(fixtureRd2['Game Code']))
+        
+        # Fixture the two bye teams against each other,
+        homeCount = getHomeGameCounts(teams,previousFixtured)
+        if homeCount[byeTeam1] > homeCount[byeTeam2]:
+            homeByeTeam = byeTeam2
+            awayByeTeam = byeTeam1
+        else:
+            homeByeTeam = byeTeam1
+            awayByeTeam = byeTeam2
+
+        totalFixture = pd.concat([fixtureRd1,fixtureRd2])
+        totalFixture.reset_index(drop=True)
+        row = len(totalFixture.index)
+        totalFixture.loc[row,'Home Team'] = homeByeTeam
+        totalFixture.loc[row,'Away Team'] = awayByeTeam
+        totalFixture.loc[row,'Game Code'] = homeByeTeam + " vs " + awayByeTeam
+
+        # Check if we are within the allowable rematches
+        maxRepeats = 0
+        for row in range(len(totalFixture.index))
+           homeT = totalFixture.loc[row,'Home Team']
+           awayT = totalFixture.loc[row,'Away Team']
+           repeats = checkIfGameInList(homeT, awayT, fixtured)[1]
+           maxRepeats = max(maxRepeats, repeats)
+       if maxRepeats <= rematchesAllowed:
+            complete = True
+        else:
+            print("Error: Could not find fixture within maxRepeats")
+            print("Slightly altering Elos to try and get a different solution")
+            for team in teams:
+                currElo = elos[team]
+                factor = random.uniform(-2.5,2.5)
+                elos[team] = currElo + factor
+
+    return totalFixture
+
+
+
+
