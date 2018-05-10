@@ -130,7 +130,7 @@ def checkIfGameInList(teamA, teamB, gamesList):
         count = gamesList.count(codeA) + gamesList.count(codeB)
     return (isIn, count)
 
-def createGameRating(teamA, teamB, elosDict, fixturedGames, requestedGames, 
+def createGameRating(teamA, teamB, elosDict, fixturedGames, requestedGames,
         antiRequestedGames):
     '''
     Evaluate how good a game will be, based on:
@@ -146,25 +146,29 @@ def createGameRating(teamA, teamB, elosDict, fixturedGames, requestedGames,
     # as this should have the same scaled value as the outcome w.r.t. team B.
     # We still have the expectedOutcomeB variable available, but it is not used
     # currently.
-    expectedOutcomeA, expectedOutcomeB = getExpectedOutcome(eloA, eloB)
+    expectedOutcomeA=getExpectedOutcome(eloA, eloB)[0]
     scaledOutcomeA = getScaledOutcome(expectedOutcomeA)
-    gameFixturedPrev, gameFixturedPrevCount = checkIfGameInList(teamA, teamB,
-            fixturedGames)
-    gameRequested, gameRequestedCount = checkIfGameInList(teamA, teamB,
-            requestedGames)
-    gameNotRequested, gameNotRequestedCount = checkIfGameInList(teamA, teamB,
-            antiRequestedGames)
-    gameRating = 100                           # Start with a rating of 100
-    gameRating = gameRating + scaledOutcomeA   # Add by the scaledOutcome
+    gameListVal = checkIfGameInList(teamA, teamB, fixturedGames)
+    gameFixturedPrev = gameListVal[0]
+    gameFixturedPrevCount = gameListVal[1]
+    gameReqVal= checkIfGameInList(teamA, teamB, requestedGames)
+    gameRequested = gameReqVal[0]
+    gameRequestedCount = gameReqVal[1]
+    gameNotReqVal = checkIfGameInList(teamA, teamB, antiRequestedGames)
+    gameNotRequested = gameNotReqVal[0]
+    gameNotRequestedCount = gameNotReqVal[1]
+    
+    gameRating = 100 + scaledOutcomeA*10
     if gameFixturedPrev:
-        gameRating = gameRating - gameFixturedPrevCount*10 # Decrement rating by
+        gameRating = gameRating - gameFixturedPrevCount*25 # Decrement rating by
                                                     # 25*number of prev fixtures
     if gameRequested:
-        gameRating = gameRating + 2
+        gameRating = gameRating + 10 
     if gameNotRequested:
-        gameRating = gameRating - 4
+        gameRating = gameRating - 10
     # Ensure we don't use negative ratings as they cause issues with maximally
     # weighted matching
+#    print(gameRating)
     return max(gameRating,0)
 
 def createGameRatingsGraph(teams, fixturedGames, requestedGames,
@@ -234,6 +238,7 @@ def fixtureSingleRound(teams, elos, fixtured, requested, antiRequested,
     Fixture a single round
     '''
     complete = False
+    teams = set(elos.keys())
     while not complete:
         gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested, 
                 antiRequested, elos)
@@ -242,18 +247,21 @@ def fixtureSingleRound(teams, elos, fixtured, requested, antiRequested,
 
         # Check to see if any games have been fixtured previously
         maxRepeats = 0
+        teamsToAlter = []
         for row in range(len(fixtures.index)):
             homeT = fixtures.loc[row,'Home Team']
             awayT = fixtures.loc[row,'Away Team']
             repeats = checkIfGameInList(homeT, awayT, fixtures)[1]
             maxRepeats = max(repeats, maxRepeats)
+            if repeats > rematchesAllowed:
+                teamsToAlter.extend([homeT,awayT])
 
         if maxRepeats <= rematchesAllowed:
             complete = True
         else:
-            print("Error: Could not find fixture within maxRepeats")
-            print("Slightly altering Elos to try and get a different solution")
-            for team in teams:
+            #print("Error: Could not find fixture within maxRepeats")
+            #print("Slightly altering Elos to try and get a different solution")
+            for team in teamsToAlter:
                 currElo = elos[team]
                 factor = random.uniform(-2.5,2.5)
                 elos[team] = currElo + factor
@@ -315,7 +323,7 @@ def fixtureDoubleRound(teams, elos, fixtured, requested, antiRequested,
             awayByeTeam = byeTeam2
 
         totalFixture = pd.concat([fixtureRd1,fixtureRd2])
-        totalFixture.reset_index(drop=True)
+        totalFixture.reset_index(drop=True,inplace=True)
         row = len(totalFixture.index)
         totalFixture.loc[row,'Home Team'] = homeByeTeam
         totalFixture.loc[row,'Away Team'] = awayByeTeam
@@ -323,19 +331,23 @@ def fixtureDoubleRound(teams, elos, fixtured, requested, antiRequested,
 
         # Check if we are within the allowable rematches
         maxRepeats = 0
+        teamsToAlter = []
         for row in range(len(totalFixture.index)):
            homeT = totalFixture.loc[row,'Home Team']
            awayT = totalFixture.loc[row,'Away Team']
            repeats = checkIfGameInList(homeT, awayT, fixtured)[1]
+           if repeats > rematchesAllowed:
+               teamsToAlter.extend([homeT,awayT])
            maxRepeats = max(maxRepeats, repeats)
+
         if maxRepeats <= rematchesAllowed:
            complete = True
         else:
-           print("Error: Could not find fixture within maxRepeats")
-           print("Slightly altering Elos to try and get a different solution")
-           for team in teams:
+           #print("Error: Could not find fixture within maxRepeats")
+           #print("Slightly altering Elos to try and get a different solution")
+           for team in teamsToAlter:
                currElo = elos[team]
-               factor = random.uniform(-2.5,2.5)
+               factor = random.uniform(-5,5)
                elos[team] = currElo + factor
 
     return totalFixture

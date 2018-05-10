@@ -5,12 +5,12 @@ import networkx as nx
 import random
 import copy
 
-def getDataFromRemote(URL: str, table: str) -> pd.DataFrame:
+def getDataFromRemote(URL, table):
     '''
     When passed a valid URL and a table name, will download the URL as a .xls
     and perform minimal cleaning, returning a DataFrame
     '''
-    results = pd.read_excel(URL, sheetname = table).dropna(how='all')
+    results = pd.read_excel(URL, sheet_name = table).dropna(how='all')
     return results
 
 def getResults(URL: str, table: str) -> pd.DataFrame:

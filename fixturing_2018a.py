@@ -78,10 +78,10 @@ elif len(mixedTeams)%2 == 1 and roundNumber%2 == 1:
 print("Mixed Fixture Complete.\nWriting to CSV")
 if mixedFixture is not None:
     mixedPath = "Mixed Round %s Fixtures 2018a.csv" %mixedRoundNumber
-    mixedFixture.to_csv(path=mixedPath)
+    mixedFixture.to_csv(path_or_buf=mixedPath,encoding='utf-8')
 
 if ladiesFixture is not None:
     ladiesPath = "Ladies Round %s Fixtures 2018a.csv" %ladiesRoundNumber
-    ladiesFixture.to_csv(path=ladiesPath)
+    ladiesFixture.to_csv(path_or_buf=ladiesPath,encoding='utf-8')
 print("Script Complete.")
 
