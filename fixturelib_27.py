@@ -264,7 +264,6 @@ def findByeTeam(fixture):
     Given a fixture with a bye team in it, return the team that has been
     allocated a bye.
     '''
-    print(fixture)
     byeRow = fixture[fixture == "Bye Team"].dropna(how = "all").index[0]
     byeCol = fixture[fixture == "Bye Team"].dropna(how = "all",axis = 1).columns[0]
     if byeCol == "Away Team":
@@ -287,13 +286,11 @@ def fixtureDoubleRound(teams, elos, fixtured, requested, antiRequested,
 
         byeElo = random.choice(elos.values())
         elos['Bye Team'] = byeElo
-        print(elos)
-        print(len(elos.keys()))
-        fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
+        fixtureRd1 = fixtureSingleRound(teams,elos,previousFixtured, requested,
                 antiRequested,rematchesAllowed)
         
-        fixtured.extend(list(fixtureRd1['Game Code']))
-        fixtureRd2 = fixtureSingleRound(teams, elos, fixtured, requested,
+        previousFixtured.extend(list(fixtureRd1['Game Code']))
+        fixtureRd2 = fixtureSingleRound(teams, elos, previousFixtured, requested,
                 antiRequested, rematchesAllowed)
 
         byeTeam1 = findByeTeam(fixtureRd1)
