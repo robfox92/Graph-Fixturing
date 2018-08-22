@@ -25,7 +25,7 @@ def getDataFromRemote(URL, table):
     results = pd.read_excel(URL, sheet_name = table).dropna(how='all')
     return results
 
-def getResults(URL: str, table: str) -> pd.DataFrame:
+def getResults(URL, table):
     '''
     Wrapper around getDataFromRemote() for the parsing and cleaning of results-
     style data (including results and previous fixtures)
@@ -34,16 +34,17 @@ def getResults(URL: str, table: str) -> pd.DataFrame:
     results.sort_values(by='Round',inplace=True)
     return results
 
-def getRatings(URL:str, table: str, teamNameCol: str, teamEloCol: str,
-        teamKCol: str) -> (dict,dict, set):
+def getRatings(URL, table, teamNameCol, teamEloCol, teamKCol):
     '''
     Wrapper around getDataFromRemote, returns a dict of the starting Elo scores
     of all the teams, a dict of their associated K values and a list of team
     names. The returned tuple is formatted (ratingsDict,kValueDict, teamNames)
     '''
     ratingsDF = getDataFromRemote(URL,table)
+    ratingsDF.index = ratingsDF[teamNameCol]
     # Cast the list of teams to a set to ensure we only have unique teams
     teams = set(ratingsDF[teamNameCol])
+
     ratingsDict = {team:ratingsDF.loc[team,teamEloCol] for team in teams}
     kValueDict = {team:ratingsDF.loc[team,teamKCol] for team in teams}
     return (ratingsDict, kValueDict, teams)
@@ -179,7 +180,7 @@ def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames:
     return max(gameRating,0)
 
 def createGameRatingsGraph(teams: set, fixturedGames: list, requestedGames: list,
-        antiRequests: list, elosDict: dict) -> nx.Graph():
+        antiRequestedGames: list, elosDict: dict) -> nx.Graph():
     '''
     Creates and returns a graph (not in the chart sense) of all possible games
     between all possible teams. Each node in the graph is a team, and each edge
@@ -191,9 +192,9 @@ def createGameRatingsGraph(teams: set, fixturedGames: list, requestedGames: list
     for teamA in teams:
         for teamB in teams:
             if teamA != teamB and not fixtureGraph.has_edge(teamA, teamB):
-                edgeWeight = createGameWeighting(teamA, teamB, elosDict,
+                edgeWeight = createGameRating(teamA, teamB, elosDict,
                         fixturedGames, requestedGames, antiRequestedGames)
-                graph.add_edge(teamA, teamB, weight = edgeWeight)
+                fixtureGraph.add_edge(teamA, teamB, weight = edgeWeight)
     return fixtureGraph
 
 def getHomeGameCounts(teams: set, fixturedGames: list) -> dict:
@@ -208,13 +209,30 @@ def getHomeGameCounts(teams: set, fixturedGames: list) -> dict:
                 homeGameCounts[team] += 1
     return homeGameCounts
 
+
+def parseMatchingToDict(pairing: set) -> dict:
+    """
+    Parse a networkx matching set to a dict
+    Didn't have to do this until networkx changed their fucking api
+    """
+    out = dict()
+    for p in pairing:
+        out[p[0]] = p[1]
+        out[p[1]] = p[0]
+    return out
+
+
 def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.DataFrame:
     '''
     Returns a df of fixtures, given a graph of ratings and a dict of previous home games.
     We use the homeGameCounts to try and even out the home/away split, so that all teams
     should get approximately the same number of home/away games over a season.
     '''
-    bestPairings = nx.max_weight_matching(gameRatings)
+    rawPairings = nx.max_weight_matching(gameRatings)
+
+    # Parse the pairings so that we can handle networkx's new api
+    bestPairings = parseMatchingToDict(rawPairings)
+
     fixture = pd.DataFrame(columns=['Home Team','Away Team','Game Code'])
     row = 0
     for teamA in bestPairings.keys():
@@ -246,9 +264,9 @@ def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
     complete = False
     while not complete:
         gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested,
-                antirequests, elos)
+                antiRequested, elos)
         homeGameCounts = getHomeGameCounts(teams, fixtured)
-        fixtures = createFixturesFromGraph(gameRatingsGraph, fixtured, homeGameCounts)
+        fixtures = createFixturesFromGraph(gameRatingsGraph, homeGameCounts)
 
         # Check to see if any games have been fixtured previously
         maxRepeats = 0
@@ -294,7 +312,7 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
     previousFixtured = copy.deepcopy(fixtured)
     while not complete:
 
-        byeElo = random.choice(elos.values())
+        byeElo = random.choice(list(elos.values()))
         elos['Bye Team'] = byeElo
         fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
                 antiRequested,rematchesAllowed)
