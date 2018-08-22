@@ -4,6 +4,18 @@ import pandas as pd
 import networkx as nx
 import random
 import copy
+import json
+
+def parseConfig(configFileName):
+    '''
+    Take a file name and return a config dict
+    '''
+
+    with open(configFileName, 'r') as configFile:
+        config = json.load(configFile)
+
+    return config
+
 
 def getDataFromRemote(URL, table):
     '''
@@ -92,19 +104,19 @@ def updateElosFromResults(elos: dict, results: pd.DataFrame, kValues: dict) -> d
         awayElo = elos[awayTeam]
         homeScore = results.loc[gameRow,'Home Score']
         awayScore = results.loc[gameRow,'Away Score']
-        
+
         # Start processing
         homeScorePerc, awayScorePerc = getGameOutcome(homeScore, awayScore)
-        homeExpected, awayExpected = getExpectedOutcome(homeElo, awayElo) 
+        homeExpected, awayExpected = getExpectedOutcome(homeElo, awayElo)
         homeNewElo = getDeviation(homeExpected, homeScorePerc, homeElo, homeK)
         awayNewElo = getDeviation(awayExpected, awayScorePerc, awayElo, awayK)
-        
+
         # Ensure winning teams don't lose Elo
         if homeScore > awayScore:
             homeNewElo = max(homeElo, homeNewElo)
         if homeScore < awayScore:
             awayNewElo = max(awayElo, awayNewElo)
-        
+
         # Create the updated Elos to push to the dict
         updatedElos = {homeTeam:homeNewElo, awayTeam: awayNewElo}
         elos.update(updatedElos)
@@ -233,7 +245,7 @@ def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
     '''
     complete = False
     while not complete:
-        gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested, 
+        gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested,
                 antirequests, elos)
         homeGameCounts = getHomeGameCounts(teams, fixtured)
         fixtures = createFixturesFromGraph(gameRatingsGraph, fixtured, homeGameCounts)
@@ -286,7 +298,7 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
         elos['Bye Team'] = byeElo
         fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
                 antiRequested,rematchesAllowed)
-        
+
         fixtured.extend(list(fixtureRd1['Game Code']))
         fixtureRd2 = fixtureSingleRound(teams, elos, fixtured, requested,
                 antiRequested, rematchesAllowed)
@@ -302,7 +314,7 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
 
         previousFixtured.extend(list(fixtureRd1['Game Code']))
         previousFixtured.extend(list(fixtureRd2['Game Code']))
-        
+
         # Fixture the two bye teams against each other,
         homeCount = getHomeGameCounts(teams,previousFixtured)
         if homeCount[byeTeam1] > homeCount[byeTeam2]:
