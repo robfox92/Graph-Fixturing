@@ -294,15 +294,16 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
     teams in the league, as we can avoid byes by fixturing two rounds at once.
     '''
     complete = False
-    previousFixtured = copy.deepcopy(fixtured)
-    while not complete:
 
+    while not complete:
+        previousFixtured = copy.deepcopy(fixtured)
         elos["Bye Team"] = random.choice(list(elos.values()))
 
         fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
                 antiRequested,rematchesAllowed)
 
         fixtured.extend(list(fixtureRd1['Game Code']))
+
         fixtureRd2 = fixtureSingleRound(teams, elos, fixtured, requested,
                 antiRequested, rematchesAllowed)
 
