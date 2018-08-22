@@ -168,18 +168,18 @@ def createGameRating(teamA: str, teamB: str, elosDict: dict, fixturedGames:
             antiRequestedGames)
     gameRating = 100                           # Start with a rating of 100
     gameRating = gameRating + scaledOutcomeA   # Add by the scaledOutcome
+
     if gameFixturedPrev:
-        gameRating = gameRating - gameFixturedPrevCount*10 # Decrement rating by
-                                                    # 25*number of prev fixtures
+        gameRating = gameRating - gameFixturedPrevCount*10
     if gameRequested:
         gameRating = gameRating + 2
     if gameNotRequested:
-        gameRating = gameRating - 4
+        gameRating = gameRating - 10
     # Ensure we don't use negative ratings as they cause issues with maximally
     # weighted matching
     return max(gameRating,0)
 
-def createGameRatingsGraph(teams: set, fixturedGames: list, requestedGames: list,
+def createGameRatingsGraph(fixturedGames: list, requestedGames: list,
         antiRequestedGames: list, elosDict: dict) -> nx.Graph():
     '''
     Creates and returns a graph (not in the chart sense) of all possible games
@@ -187,6 +187,8 @@ def createGameRatingsGraph(teams: set, fixturedGames: list, requestedGames: list
     in the graph represents a game between the two teams, with an edge with a
     weight representing "how good" the game will be.
     '''
+    teams = elosDict.keys()
+
     fixtureGraph = nx.Graph()
     fixtureGraph.add_nodes_from(teams)
     for teamA in teams:
@@ -210,17 +212,6 @@ def getHomeGameCounts(teams: set, fixturedGames: list) -> dict:
     return homeGameCounts
 
 
-def parseMatchingToDict(pairing: set) -> dict:
-    """
-    Parse a networkx matching set to a dict
-    Didn't have to do this until networkx changed their fucking api
-    """
-    out = dict()
-    for p in pairing:
-        out[p[0]] = p[1]
-        out[p[1]] = p[0]
-    return out
-
 
 def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.DataFrame:
     '''
@@ -229,31 +220,24 @@ def createFixturesFromGraph(gameRatings: nx.Graph, homeGameCounts: dict) -> pd.D
     should get approximately the same number of home/away games over a season.
     '''
     rawPairings = nx.max_weight_matching(gameRatings)
-
-    # Parse the pairings so that we can handle networkx's new api
-    bestPairings = parseMatchingToDict(rawPairings)
-
+    homeGameCounts["Bye Team"] = 0
     fixture = pd.DataFrame(columns=['Home Team','Away Team','Game Code'])
     row = 0
-    for teamA in bestPairings.keys():
-        teamB = bestPairings[teamA]
-        # Check if the teams have been fixtured so far, as the dict of pairings
-        # contains two entries for each "game" (e.g. {teamA:teamB,teamB:teamA}).
-        # We only want to fixture each game once though.
-        if (teamA not in fixture['Home Team'].unique() and
-            teamB not in fixture['Home Team'].unique() and
-            teamA not in fixture['Away Team'].unique() and
-            teamB not in fixture['Away Team'].unique()):
-            if homeGameCounts[teamA] > homeGameCounts[teamB]:
-                homeTeam = teamB
-                awayTeam = teamA
-            else:
-                homeTeam = teamA
-                awayTeam = teamB
-            fixture.loc[row,'Home Team'] = homeTeam
-            fixture.loc[row,'Away Team'] = awayTeam
-            fixture.loc[row,'Game Code'] = homeTeam + " vs " + awayTeam
-            r+=1
+
+    for match in rawPairings:
+        teamA = match[0]
+        teamB = match[1]
+
+        if homeGameCounts[teamA] > homeGameCounts[teamB]:
+            homeTeam = teamB
+            awayTeam = teamA
+        else:
+            homeTeam = teamA
+            awayTeam = teamB
+        fixture.loc[row,'Home Team'] = homeTeam
+        fixture.loc[row,'Away Team'] = awayTeam
+        fixture.loc[row,'Game Code'] = homeTeam + " vs " + awayTeam
+        row+=1
     return fixture
 
 def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
@@ -263,7 +247,7 @@ def fixtureSingleRound(teams: set, elos: dict, fixtured: list, requested: list,
     '''
     complete = False
     while not complete:
-        gameRatingsGraph = createGameRatingsGraph(teams, fixtured, requested,
+        gameRatingsGraph = createGameRatingsGraph(fixtured, requested,
                 antiRequested, elos)
         homeGameCounts = getHomeGameCounts(teams, fixtured)
         fixtures = createFixturesFromGraph(gameRatingsGraph, homeGameCounts)
@@ -292,6 +276,7 @@ def findByeTeam(fixture: pd.DataFrame) -> str:
     Given a fixture with a bye team in it, return the team that has been
     allocated a bye.
     '''
+
     byeRow = fixture[fixture == "Bye Team"].dropna(how = "all").index[0]
     byeCol = fixture[fixture == "Bye Team"].dropna(how = "all",axis = 1).columns[0]
     if byeCol == "Away Team":
@@ -312,8 +297,8 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
     previousFixtured = copy.deepcopy(fixtured)
     while not complete:
 
-        byeElo = random.choice(list(elos.values()))
-        elos['Bye Team'] = byeElo
+        elos["Bye Team"] = random.choice(list(elos.values()))
+
         fixtureRd1 = fixtureSingleRound(teams,elos,fixtured, requested,
                 antiRequested,rematchesAllowed)
 
@@ -325,10 +310,10 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
         byeTeam2 = findByeTeam(fixtureRd2)
 
         # Remove the bye team games from the fixtures
-        fixtureRd1[fixtureRd1['Home Team'] != "Bye Team"]
-        fixtureRd1[fixtureRd1['Away Team'] != "Bye Team"]
-        fixtureRd2[fixtureRd2['Home Team'] != "Bye Team"]
-        fixtureRd2[fixtureRd2['Away Team'] != "Bye Team"]
+        fixtureRd1 = fixtureRd1[fixtureRd1['Home Team'] != "Bye Team"]
+        fixtureRd1 = fixtureRd1[fixtureRd1['Away Team'] != "Bye Team"]
+        fixtureRd2 = fixtureRd2[fixtureRd2['Home Team'] != "Bye Team"]
+        fixtureRd2 = fixtureRd2[fixtureRd2['Away Team'] != "Bye Team"]
 
         previousFixtured.extend(list(fixtureRd1['Game Code']))
         previousFixtured.extend(list(fixtureRd2['Game Code']))
@@ -343,8 +328,9 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
             awayByeTeam = byeTeam2
 
         totalFixture = pd.concat([fixtureRd1,fixtureRd2])
-        totalFixture.reset_index(drop=True)
+        totalFixture.reset_index(drop=True,inplace=True)
         row = len(totalFixture.index)
+
         totalFixture.loc[row,'Home Team'] = homeByeTeam
         totalFixture.loc[row,'Away Team'] = awayByeTeam
         totalFixture.loc[row,'Game Code'] = homeByeTeam + " vs " + awayByeTeam
@@ -354,8 +340,10 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
         for row in range(len(totalFixture.index)):
            homeT = totalFixture.loc[row,'Home Team']
            awayT = totalFixture.loc[row,'Away Team']
-           repeats = checkIfGameInList(homeT, awayT, fixtured)[1]
+           repeats = checkIfGameInList(homeT, awayT, previousFixtured)[1] - 1
            maxRepeats = max(maxRepeats, repeats)
+
+
         if maxRepeats <= rematchesAllowed:
            complete = True
         else:
@@ -363,7 +351,7 @@ def fixtureDoubleRound(teams: set, elos: dict, fixtured: list, requested: list,
            print("Slightly altering Elos to try and get a different solution")
            for team in teams:
                currElo = elos[team]
-               factor = random.uniform(-2.5,2.5)
+               factor = random.uniform(-10,10)
                elos[team] = currElo + factor
 
     return totalFixture
